@@ -64,7 +64,7 @@ async fn main() -> Result<(), ClientError> {
     let topic_name = "mountain-mqtt-example-topic";
     let retain = false;
 
-    client.subscribe(topic_name, QualityOfService::Qos1).await?;
+    client.subscribe(topic_name, QualityOfService::Qos1, false).await?;
 
     client
         .publish(

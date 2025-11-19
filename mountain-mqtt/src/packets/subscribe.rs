@@ -24,12 +24,12 @@ pub struct SubscriptionRequest<'a> {
 }
 
 impl<'a> SubscriptionRequest<'a> {
-    pub fn new(topic_name: &'a str, maximum_qos: QualityOfService) -> SubscriptionRequest<'a> {
+    pub fn new(topic_name: &'a str, maximum_qos: QualityOfService, no_local: bool) -> SubscriptionRequest<'a> {
         SubscriptionRequest {
             topic_name,
             options: SubscriptionOptions {
                 maximum_qos,
-                no_local: false,
+                no_local,
                 retain_as_published: false,
                 retain_handling: RetainHandling::SendOnSubscribe,
             },
@@ -286,10 +286,10 @@ mod tests {
     }
 
     fn example_packet<'a>() -> Subscribe<'a, 1, 2> {
-        let first_request = SubscriptionRequest::new("test/topic", QualityOfService::Qos0);
+        let first_request = SubscriptionRequest::new("test/topic", QualityOfService::Qos0, false);
         let mut other_requests = Vec::new();
         other_requests
-            .push(SubscriptionRequest::new("hehe/#", QualityOfService::Qos1))
+            .push(SubscriptionRequest::new("hehe/#", QualityOfService::Qos1, false))
             .unwrap();
         let mut properties = Vec::new();
         properties

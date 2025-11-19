@@ -246,6 +246,7 @@ pub trait Client<'a> {
         &'b mut self,
         topic_name: &'b str,
         maximum_qos: QualityOfService,
+        no_local: bool,
     ) -> Result<(), ClientError>;
 
     /// Unsubscribe from a topic
@@ -286,6 +287,7 @@ pub enum ClientAction<'a, const P: usize> {
     Subscribe {
         topic_name: &'a str,
         maximum_qos: QualityOfService,
+        no_local: bool,
     },
     Unsubscribe {
         topic_name: &'a str,
@@ -534,8 +536,9 @@ where
         &'b mut self,
         topic_name: &'b str,
         maximum_qos: QualityOfService,
+        no_local: bool,
     ) -> Result<(), ClientError> {
-        let packet = self.client_state.subscribe(topic_name, maximum_qos)?;
+        let packet = self.client_state.subscribe(topic_name, maximum_qos, no_local)?;
         self.send_wait_for_responses(packet).await
     }
 
@@ -645,7 +648,8 @@ where
             ClientAction::Subscribe {
                 topic_name,
                 maximum_qos,
-            } => self.subscribe(topic_name, maximum_qos).await,
+                no_local
+            } => self.subscribe(topic_name, maximum_qos, no_local).await,
             ClientAction::Unsubscribe { topic_name } => self.unsubscribe(topic_name).await,
             ClientAction::Publish {
                 topic_name,

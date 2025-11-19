@@ -102,7 +102,7 @@ async fn connect_subscribe_and_publish() {
     let mut buf = [0; 1024];
     let mut client = tokio_localhost_client_connected(CLIENT_ID, &mut buf).await;
 
-    let primary_request = SubscriptionRequest::new(TOPIC_NAME, QualityOfService::Qos0);
+    let primary_request = SubscriptionRequest::new(TOPIC_NAME, QualityOfService::Qos0, false);
     let subscribe: Subscribe<'_, 0, 0> =
         Subscribe::new(PACKET_IDENTIFIER, primary_request, Vec::new(), Vec::new());
     client.send(subscribe).await.unwrap();

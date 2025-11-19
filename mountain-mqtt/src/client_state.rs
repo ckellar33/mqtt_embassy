@@ -242,6 +242,7 @@ pub trait ClientState {
         &mut self,
         topic_name: &'b str,
         maximum_qos: QualityOfService,
+        no_local: bool,
     ) -> Result<Subscribe<'b, 0, 0>, ClientStateError>;
 
     /// Produce a packet to unsubscribe from a topic by name, update state
@@ -430,6 +431,7 @@ impl ClientState for ClientStateNoQueue {
         &mut self,
         topic_name: &'b str,
         maximum_qos: QualityOfService,
+        no_local: bool,
     ) -> Result<Subscribe<'b, 0, 0>, ClientStateError> {
         match self {
             ClientStateNoQueue::Connected(ConnectionState { info: _, waiting }) => {
@@ -438,7 +440,7 @@ impl ClientState for ClientStateNoQueue {
                 } else if maximum_qos == QualityOfService::Qos2 {
                     Err(ClientStateError::Qos2NotSupported)
                 } else {
-                    let first_request = SubscriptionRequest::new(topic_name, maximum_qos);
+                    let first_request = SubscriptionRequest::new(topic_name, maximum_qos, no_local);
                     let subscribe: Subscribe<'_, 0, 0> = Subscribe::new(
                         Self::SUBSCRIBE_PACKET_IDENTIFIER,
                         first_request,
