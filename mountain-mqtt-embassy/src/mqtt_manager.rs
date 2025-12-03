@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 // use defmt::*;
 use embassy_net::{tcp::TcpSocket, Ipv4Address, Stack};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Receiver, Sender};
 use embassy_time::{Delay, Duration, Instant, Timer};
 use mountain_mqtt::client::{
@@ -248,7 +248,7 @@ where
     E: FromApplicationMessage<P> + Clone,
 {
     connection_id: ConnectionId,
-    event_sender: &'a Sender<'a, NoopRawMutex, MqttEvent<E>, Q>,
+    event_sender: &'a Sender<'a, CriticalSectionRawMutex, MqttEvent<E>, Q>,
     state: &'a RefCell<State<A>>,
 }
 
@@ -337,8 +337,8 @@ async fn handle_messages<'a, A, C, E, const Q: usize>(
     client: &mut C,
     state: &RefCell<State<A>>,
     connection_settings: &ConnectionSettings<'static>,
-    event_sender: &Sender<'static, NoopRawMutex, MqttEvent<E>, Q>,
-    action_receiver: &mut Receiver<'static, NoopRawMutex, A, Q>,
+    event_sender: &Sender<'static, CriticalSectionRawMutex, MqttEvent<E>, Q>,
+    action_receiver: &mut Receiver<'static, CriticalSectionRawMutex, A, Q>,
     settings: &Settings,
 ) -> Result<(), Error>
 where
@@ -490,8 +490,8 @@ where
 ///     stack: Stack<'static>,
 ///     connection_settings: ConnectionSettings<'static>,
 ///     settings: Settings,
-///     event_sender: Sender<'static, NoopRawMutex, MqttEvent<Event>, 32>,
-///     action_receiver: Receiver<'static, NoopRawMutex, MqttAction, 32>,
+///     event_sender: Sender<'static, CriticalSectionRawMutex, MqttEvent<Event>, 32>,
+///     action_receiver: Receiver<'static, CriticalSectionRawMutex, MqttAction, 32>,
 /// ) -> ! {
 ///     mqtt_manager::run::<MqttAction, Event, 16, 4096, 32>(
 ///         stack,
@@ -507,8 +507,8 @@ pub async fn run<A, E, const P: usize, const B: usize, const Q: usize>(
     stack: Stack<'static>,
     connection_settings: ConnectionSettings<'static>,
     settings: Settings,
-    event_sender: Sender<'static, NoopRawMutex, MqttEvent<E>, Q>,
-    mut action_receiver: Receiver<'static, NoopRawMutex, A, Q>,
+    event_sender: Sender<'static, CriticalSectionRawMutex, MqttEvent<E>, Q>,
+    mut action_receiver: Receiver<'static, CriticalSectionRawMutex, A, Q>,
 ) -> !
 where
     E: FromApplicationMessage<P> + Clone,
