@@ -1,5 +1,4 @@
 use core::cell::RefCell;
-// use defmt::*;
 use embassy_net::{tcp::TcpSocket, Ipv4Address, Stack};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Receiver, Sender};
@@ -13,7 +12,6 @@ use mountain_mqtt::embedded_hal_async::DelayEmbedded;
 use mountain_mqtt::embedded_io_async::ConnectionEmbedded;
 use mountain_mqtt::mqtt_manager::{ConnectionId, MqttOperations};
 use mountain_mqtt::packets::publish::ApplicationMessage;
-// use {defmt_rtt as _, panic_probe as _};
 
 /// Convert an [ApplicationMessage] to an application-specific event type
 /// This is a specific trait rather than [TryFrom] so it can use a specific
@@ -363,14 +361,14 @@ where
     loop {
         Timer::after(settings.poll_interval).await;
 
-        if last_ping_instant.elapsed() > settings.ping_interval {
+        if Instant::now().saturating_duration_since(last_ping_instant) > settings.ping_interval {
             last_ping_instant = Instant::now();
             client.send_ping().await?;
         }
 
         // Check for stabilisation
         if let Some(instant) = connection_instant {
-            if instant.elapsed() > settings.stabilisation_interval {
+            if Instant::now().saturating_duration_since(instant) > settings.stabilisation_interval {
                 connection_instant = None;
                 event_sender
                     .send(MqttEvent::ConnectionStable {
@@ -381,7 +379,7 @@ where
         }
 
         // Check for too long since last connection event
-        let elapsed = state.borrow().last_connection_event.elapsed();
+        let elapsed = Instant::now().saturating_duration_since(state.borrow().last_connection_event);
         if elapsed > settings.connection_event_max_interval {
             #[cfg(feature = "defmt")]
             defmt::warn!("Mqtt server unresponsive");
@@ -522,56 +520,66 @@ where
 
     loop {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-
-        socket.set_timeout(None);
+        socket.set_timeout(Some(Duration::from_secs(30)));
 
         let remote_endpoint = (settings.address, settings.port);
         #[cfg(feature = "defmt")]
         defmt::info!("MQTT socket connecting to {:?}...", remote_endpoint);
-        if let Err(e) = socket.connect(remote_endpoint).await {
+        if let Err(_e) = socket.connect(remote_endpoint).await {
             #[cfg(feature = "defmt")]
-            defmt::warn!("MQTT socket connect error, will retry: {:?}", e);
-            // Wait a while to try reconnecting
+            defmt::warn!("MQTT socket connect error, will retry: {:?}", _e);
+            socket.abort();
+            drop(socket);
             Timer::after(settings.reconnection_delay).await;
             continue;
         }
         #[cfg(feature = "defmt")]
         defmt::info!("MQTT socket connected!");
 
-        let connection = ConnectionEmbedded::new(socket);
-        let delay = DelayEmbedded::new(Delay);
-        let timeout_millis = settings.response_timeout.as_millis() as u32;
+        // Scoped block: client + socket are dropped before the reconnection delay,
+        // ensuring the TCP socket slot is freed immediately.
+        let error = {
+            let connection = ConnectionEmbedded::new(socket);
+            let delay = DelayEmbedded::new(Delay);
+            let timeout_millis = settings.response_timeout.as_millis() as u32;
 
-        let state: RefCell<State<A>> = RefCell::new(State::new());
+            let state: RefCell<State<A>> = RefCell::new(State::new());
 
-        let connection_id = ConnectionId::new(connection_index);
-        connection_index += 1;
+            let connection_id = ConnectionId::new(connection_index);
+            connection_index += 1;
 
-        let event_handler = ChannelEventHandler {
-            connection_id,
-            event_sender: &event_sender,
-            state: &state,
+            let event_handler = ChannelEventHandler {
+                connection_id,
+                event_sender: &event_sender,
+                state: &state,
+            };
+
+            let mut client = ClientNoQueue::new(
+                connection,
+                &mut mqtt_buffer,
+                delay,
+                timeout_millis,
+                event_handler,
+            );
+
+            match handle_messages(
+                connection_id,
+                &mut client,
+                &state,
+                &connection_settings,
+                &event_sender,
+                &mut action_receiver,
+                &settings,
+            )
+            .await
+            {
+                Ok(()) => None,
+                Err(error) => Some((connection_id, error)),
+            }
         };
+        // socket + client are now dropped; socket slot is freed
 
-        let mut client = ClientNoQueue::new(
-            connection,
-            &mut mqtt_buffer,
-            delay,
-            timeout_millis,
-            event_handler,
-        );
-
-        if let Err(error) = handle_messages(
-            connection_id,
-            &mut client,
-            &state,
-            &connection_settings,
-            &event_sender,
-            &mut action_receiver,
-            &settings,
-        )
-        .await
-        {
+        if let Some((connection_id, error)) = error {
             #[cfg(feature = "defmt")]
             defmt::warn!("MQTT handle_messages errored: {:?}", error);
             event_sender
@@ -582,7 +590,6 @@ where
                 .await;
         }
 
-        // Wait a while to try reconnecting
         Timer::after(settings.reconnection_delay).await;
     }
 }
